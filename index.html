@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#123a5a" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <title>Dental Study App</title>
+  <style>
+    :root{--bg:#f4f7fb;--card:#fff;--text:#17212b;--muted:#607080;--brand:#123a5a;--accent:#2f80ed;--good:#218739;--bad:#b42318;--border:#dbe3ec}
+    @media(prefers-color-scheme:dark){:root{--bg:#0f1720;--card:#17212b;--text:#f7f9fb;--muted:#aeb9c4;--brand:#0d2c45;--border:#314252}}
+    *{box-sizing:border-box} body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text)}
+    header{position:sticky;top:0;z-index:5;background:var(--brand);color:white;padding:calc(14px + env(safe-area-inset-top)) 18px 14px;box-shadow:0 2px 10px #0002}
+    header h1{font-size:22px;margin:0} header p{margin:3px 0 0;opacity:.85;font-size:13px}
+    main{max-width:880px;margin:auto;padding:18px 18px calc(28px + env(safe-area-inset-bottom))}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;margin-bottom:14px;box-shadow:0 5px 18px #0000000d}
+    button,select{font:inherit} button{border:0;border-radius:12px;padding:13px 16px;font-weight:650;cursor:pointer}
+    .primary{background:var(--accent);color:#fff}.secondary{background:transparent;color:var(--text);border:1px solid var(--border)}
+    .choice{width:100%;text-align:left;background:var(--card);color:var(--text);border:1px solid var(--border);margin:7px 0}
+    .choice.selected{outline:3px solid var(--accent)} .choice.correct{border-color:var(--good);background:#dff5e5;color:#133b1c}.choice.incorrect{border-color:var(--bad);background:#fde2df;color:#5b1711}
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.grow{flex:1}.hidden{display:none!important}
+    .progress{height:10px;background:var(--border);border-radius:999px;overflow:hidden}.bar{height:100%;background:var(--accent);width:0}
+    .muted{color:var(--muted)} .small{font-size:13px}.pill{display:inline-block;border-radius:999px;padding:5px 9px;background:var(--border);font-size:12px;margin-right:5px}
+    .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.stat{padding:14px;border:1px solid var(--border);border-radius:12px;text-align:center}.stat b{display:block;font-size:22px}
+    @media(max-width:560px){.stats{grid-template-columns:1fr}.row button{flex:1}}
+  </style>
+</head>
+<body>
+<header><h1>Dental Study App</h1><p>Offline practice exams for iPad</p></header>
+<main>
+  <section id="home" class="card">
+    <h2>Practice Exam</h2>
+    <p class="muted">This starter version includes demo questions. Future exams can be inserted into the same app.</p>
+    <div class="row">
+      <label class="grow">Mode<br><select id="mode"><option value="exam">Exam mode</option><option value="study">Study mode</option></select></label>
+      <label class="grow">Question order<br><select id="order"><option value="normal">Normal</option><option value="shuffle">Shuffle</option></select></label>
+    </div>
+    <div class="row" style="margin-top:16px"><button class="primary" id="startBtn">Start Exam</button><button class="secondary" id="resumeBtn">Resume Saved Exam</button></div>
+  </section>
+
+  <section id="quiz" class="hidden">
+    <div class="card">
+      <div class="row small"><span id="counter"></span><span class="grow"></span><span id="flagStatus"></span></div>
+      <div class="progress"><div id="bar" class="bar"></div></div>
+      <h2 id="question"></h2><div id="choices"></div>
+      <div id="explanation" class="hidden card" style="margin-top:14px"></div>
+      <div class="row"><button class="secondary" id="prevBtn">Previous</button><button class="secondary" id="flagBtn">Flag</button><button class="primary" id="nextBtn">Next</button><button class="primary hidden" id="submitBtn">Submit</button></div>
+    </div>
+  </section>
+
+  <section id="results" class="hidden card">
+    <h2>Results</h2>
+    <div class="stats"><div class="stat"><b id="scorePct">0%</b><span>Score</span></div><div class="stat"><b id="scoreRaw">0/0</b><span>Correct</span></div><div class="stat"><b id="flagCount">0</b><span>Flagged</span></div></div>
+    <div class="row" style="margin-top:16px"><button class="primary" id="reviewMissedBtn">Review Missed</button><button class="secondary" id="restartBtn">Restart</button></div>
+    <div id="review"></div>
+  </section>
+</main>
+<script>
+const baseQuestions=[
+ {q:'Which enzyme synthesizes new DNA strands during PCR?',o:['DNA ligase','DNA polymerase','Helicase','Primase'],a:1,e:'DNA polymerase extends the primers by adding nucleotides.'},
+ {q:'True or False: PCR requires primers.',o:['True','False'],a:0,e:'Primers provide the starting point for DNA synthesis.'},
+ {q:'Which sequencing platform detects hydrogen ions released during nucleotide incorporation?',o:['Sanger sequencing','Ion Torrent','Illumina','Nanopore'],a:1,e:'Ion Torrent detects changes in pH caused by released hydrogen ions.'},
+ {q:'Whole-metagenome shotgun sequencing can identify microbial genes and functional pathways.',o:['True','False'],a:0,e:'WMS sequences total community DNA, allowing taxonomic and functional analysis.'}
+];
+let questions=[],answers=[],flags=[],i=0,mode='exam';
+const $=id=>document.getElementById(id);
+function save(){localStorage.setItem('dentalStudyState',JSON.stringify({questions,answers,flags,i,mode}))}
+function start(resume=false){
+ if(resume){const s=JSON.parse(localStorage.getItem('dentalStudyState')||'null');if(!s)return alert('No saved exam found.');({questions,answers,flags,i,mode}=s)}
+ else{mode=$('mode').value;questions=[...baseQuestions];if($('order').value==='shuffle')questions.sort(()=>Math.random()-.5);answers=Array(questions.length).fill(null);flags=Array(questions.length).fill(false);i=0}
+ $('home').classList.add('hidden');$('results').classList.add('hidden');$('quiz').classList.remove('hidden');render();save();
+}
+function render(){const q=questions[i];$('counter').textContent=`Question ${i+1} of ${questions.length}`;$('bar').style.width=`${((i+1)/questions.length)*100}%`;$('question').textContent=q.q;$('flagStatus').textContent=flags[i]?'Flagged':'';$('choices').innerHTML='';
+ q.o.forEach((x,n)=>{const b=document.createElement('button');b.className='choice'+(answers[i]===n?' selected':'');b.textContent=x;b.onclick=()=>choose(n);$('choices').appendChild(b)});
+ $('prevBtn').disabled=i===0;$('nextBtn').classList.toggle('hidden',i===questions.length-1);$('submitBtn').classList.toggle('hidden',i!==questions.length-1);$('explanation').classList.add('hidden');}
+function choose(n){answers[i]=n;if(mode==='study'){[...$('choices').children].forEach((b,k)=>{b.classList.remove('selected');if(k===questions[i].a)b.classList.add('correct');else if(k===n)b.classList.add('incorrect')});$('explanation').innerHTML=`<b>${n===questions[i].a?'Correct':'Incorrect'}</b><br>${questions[i].e}`;$('explanation').classList.remove('hidden')}else render();save()}
+function finish(){let c=0,r='';questions.forEach((q,n)=>{const ok=answers[n]===q.a;if(ok)c++;r+=`<div class="card"><b>Question ${n+1}</b><p>${q.q}</p><p>Your answer: ${answers[n]===null?'Not answered':q.o[answers[n]]}<br>Correct answer: ${q.o[q.a]}</p><p class="muted">${q.e}</p></div>`});$('quiz').classList.add('hidden');$('results').classList.remove('hidden');$('scorePct').textContent=Math.round(c/questions.length*100)+'%';$('scoreRaw').textContent=`${c}/${questions.length}`;$('flagCount').textContent=flags.filter(Boolean).length;$('review').innerHTML=r;localStorage.removeItem('dentalStudyState')}
+$('startBtn').onclick=()=>start(false);$('resumeBtn').onclick=()=>start(true);$('prevBtn').onclick=()=>{if(i>0){i--;render();save()}};$('nextBtn').onclick=()=>{if(i<questions.length-1){i++;render();save()}};$('flagBtn').onclick=()=>{flags[i]=!flags[i];render();save()};$('submitBtn').onclick=finish;$('restartBtn').onclick=()=>location.reload();$('reviewMissedBtn').onclick=()=>{[...$('review').children].forEach((el,n)=>el.style.display=answers[n]===questions[n].a?'none':'block')};
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js'));
+</script>
+</body></html>
